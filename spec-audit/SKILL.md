@@ -39,6 +39,20 @@ By default, audits are **partial**: only files changed since the last audit are 
 
 The `mode` field in audit.json and index.json records whether the audit was `"full"` or `"partial"`.
 
+## Execution Strategy
+
+For folder-scoped audits with multiple specs, parallelize the work using subagents:
+
+1. **Scan phase** (main agent) — Read all specs to identify which specialist domains are relevant. Determine the specialist activation list.
+2. **Dispatch phase** — Launch subagents in parallel:
+   - One subagent runs the **6 core dimensions** across all specs
+   - One subagent per **activated specialist** (e.g., database specialist, auth specialist) — each reads the same specs but through its domain lens
+3. **Merge phase** (main agent) — Collect findings from all subagents, deduplicate by fingerprint (core findings win over specialist duplicates), assign sequential IDs (F001, F002…), and write the unified `audit.json`.
+
+For single-file audits or when subagents aren't available, run everything sequentially in one pass — core dimensions first, then specialists.
+
+Each subagent should receive: the list of spec file paths, the scope, and any prior `responses.json` for fingerprint matching. Subagents return their findings as JSON arrays; the main agent handles ID assignment, deduplication, summary aggregation, and writing the final output.
+
 ## Audit Dimensions
 
 Run every spec through these checks. Not every check applies to every spec — use judgment.
@@ -74,6 +88,91 @@ Run every spec through these checks. Not every check applies to every spec — u
 - Contradictions between specs
 - Missing context (a spec references something not defined elsewhere)
 - Outdated references (packages, versions, commands that may have changed)
+
+## Specialist Auditors
+
+Domain-specific lenses that catch issues generic checks miss — they require understanding how a technology actually works, what its common pitfalls are, and how misconfiguration at the spec level cascades into implementation bugs. Each activated specialist runs as its own subagent in parallel (see Execution Strategy above).
+
+**When to activate:** Determined during the scan phase. Look for domain signals in the specs (migration tasks, queue config, permission references, billing flows, etc.). Only activate specialists whose domain appears. Most audits activate 1–3 specialists.
+
+**Output:** Specialist findings use dimension `specialist:{domain}` (e.g., `specialist:database`). They follow the same severity, fingerprint, and output rules as core findings. Add specialist dimensions to the `by_dimension` summary counts.
+
+### Database / Schema / Migration
+
+**Activates when:** specs mention migrations, database tables, columns, indexes, foreign keys, schema changes, seeders, or model relationships.
+
+Checks:
+
+- **Migration ordering** — Stories creating foreign keys must depend on stories that create the referenced tables. A migration adding a `user_id` FK must run after the users table migration. Look for implicit ordering not captured in Dependencies sections.
+- **Rollback safety** — Are destructive migrations (dropping columns, changing types) acknowledged? If a migration transforms data, is the reverse path addressed or explicitly marked irreversible?
+- **Column types** — Appropriate types for the data described: `decimal` for money (not `float`), `json` for flexible structures, `timestamp` for time data. Laravel 12's `HasUuids` trait defaults to UUIDv7 (ordered) — specs assuming v4 UUIDs should be flagged.
+- **Index coverage** — If acceptance criteria mention filtering or querying by specific fields, is there a task to add the corresponding index? Flag missing composite indexes for multi-column lookups (especially `[tenant_id, ...]` patterns).
+- **Multi-tenant isolation** — For tenant-scoped tables: is the tenant identifier column specified? Are unique constraints tenant-aware (e.g., unique email per org, not globally)? Are global scopes mentioned to prevent cross-tenant queries?
+- **Soft delete awareness** — If specs say "deactivate" or "archive" rather than "delete", is `SoftDeletes` specified? Unique indexes on soft-deletable models need to account for deleted records (partial indexes or include `deleted_at`).
+- **Seeder consistency** — Do seeders/fixtures reference tables and columns that match the schema defined in migration stories?
+- **Test coverage** — Do specs include tasks for migration rollback tests, seeder verification, and schema assertion tests? Flag stories that create complex schemas (polymorphic relations, composite keys, JSON columns) without corresponding test tasks.
+
+### Auth / Permissions
+
+**Activates when:** specs mention authentication, authorization, roles, permissions, guards, policies, middleware, multi-tenant access control, or team-based permissions.
+
+Checks:
+
+- **Permission completeness** — If a feature restricts access ("only admins can…"), is there a corresponding permission defined? Are permission names consistent across all specs (no `manage-users` in one place and `users.manage` in another)?
+- **Spatie teams mode pitfalls** — If using Spatie laravel-permission with `teams: true`: is there a spec for where `setPermissionsTeamId()` gets called (middleware, service provider)? Is permission cache separation per tenant addressed? After switching team context, cached roles/permissions on user model relations must be unset — flag if not mentioned.
+- **Role hierarchy** — Are roles defined with clear capabilities? If "manager" inherits from "editor", is that explicit? Are there global roles (super-admin) that bypass tenant scoping, and is that interaction defined?
+- **Middleware configuration** — Laravel 11+ configures middleware in `bootstrap/app.php` (not `Kernel.php`). Specs referencing `Kernel.php` or `Auth::routes()` are outdated. Are protected routes explicitly listed or grouped?
+- **Guard separation** — If admin and user auth are separate (e.g., Filament admin panel vs main app), are separate guards defined? Do specs clarify which guard each auth flow uses?
+- **2FA and session lifecycle** — If specs mention 2FA, are recovery codes, single-use enforcement, and re-authentication flows specified? Is session expiry / token refresh addressed?
+- **Test coverage** — Do specs include tasks for testing permission boundaries (user A can't access user B's resources), role assignment/revocation, guard isolation, and tenant-scoping enforcement? Flag multi-tenant auth specs without cross-tenant access tests.
+
+### Queue / Background Jobs
+
+**Activates when:** specs mention queues, jobs, workers, Horizon, Redis, scheduled tasks, event listeners, or async processing.
+
+Checks:
+
+- **Failure handling** — Do job specs define retry count, backoff strategy, and final-failure behavior (log, notify, dead letter)? Unspecified retry behavior defaults to 1 attempt with no recovery.
+- **Queue separation** — Are different job types assigned to named queues? Heavy processing jobs on the same queue as real-time notifications will cause latency. Flag specs that put everything on `default` without justification.
+- **Horizon topology** — If using Horizon: is the supervisor/queue mapping specified (which supervisors handle which queues)? Are auto-scaling parameters (`minProcesses`, `maxProcesses`, `balanceMaxShift`) mentioned for production? Is the balancing strategy (`auto` vs `simple`) chosen deliberately?
+- **Idempotency** — Jobs that modify external state (send email, charge card, call API) must be safe to run twice. Flag job specs that don't address duplicate execution. Webhook handlers are especially prone — Stripe retries up to 19 times.
+- **Infrastructure dependencies** — Do queue-related stories depend on Redis/Horizon setup stories? Flag orphaned job specs with no infrastructure dependency.
+- **Timeout alignment** — If `retry_after` is shorter than actual job runtime, jobs get double-processed. Flag long-running job specs (report generation, data imports) that don't specify timeout and memory limits.
+- **Unique jobs** — If specs describe jobs that shouldn't run concurrently (e.g., "sync tenant data"), is `ShouldBeUnique` or an equivalent locking strategy specified?
+- **Test coverage** — Do specs include tasks for testing job failure/retry behavior, dead letter scenarios, and queue isolation? Flag jobs that handle payments or external API calls without specifying failure-path tests.
+
+### Billing / Subscription
+
+**Activates when:** specs mention payments, subscriptions, Stripe, Cashier, plans, pricing, invoices, webhooks, trials, or metered billing.
+
+Checks:
+
+- **Webhook idempotency** — Stripe retries failed webhooks. Are webhook handlers explicitly idempotent? Flag handlers that create records without checking for duplicates. Is `STRIPE_WEBHOOK_SECRET` verification specified?
+- **Subscription lifecycle** — Are all states defined (trialing, active, past_due, canceled, incomplete, paused)? What changes in the UI and access control for each state? Flag specs that only define the happy path (subscribe → active) without addressing failures or cancellations.
+- **Plan transitions** — Is upgrade/downgrade behavior explicit? Proration (immediate charge vs end-of-cycle), feature access during grace periods, and what happens to in-flight usage on plan change.
+- **Trial handling** — Are trial periods, trial-to-paid conversion, and expired-trial behavior specified? Note: Cashier checkout sessions + `trial_end` + `billing_cycle_anchor` don't work together (known Cashier limitation) — flag if specs combine these.
+- **Metered billing** — If applicable: Cashier 16 changed metered billing to use `Stripe\V2\Billing\MeterEvent` and requires `meter_event_name`/`meter_id` columns on `subscription_items`. Flag specs that don't account for this schema requirement.
+- **Multi-tenant billing** — Do Stripe customers map to users or to organizations/tenants? Is this explicit? Can one org have multiple subscriptions, or one per tenant?
+- **Stripe API version** — Cashier 16 uses Stripe API `2025-07-30.basil`. Flag specs referencing older Stripe patterns or not addressing API version pinning.
+- **Test coverage** — Do specs include tasks for testing webhook signature verification, subscription state transitions, failed payment handling, and plan change proration? Flag billing specs that only test the happy path (successful charge) without failure scenarios.
+
+### Security
+
+**Activates when:** specs describe user-facing features, API endpoints, form inputs, file uploads, authentication flows, external integrations, or any operation handling sensitive data. This specialist has a low activation threshold — most epics with user-facing stories should trigger it.
+
+Checks:
+
+- **Input validation** — Do specs describing user input (forms, API parameters, file uploads) include validation rules or reference a validation layer? Flag specs that accept user input without mentioning validation — especially freeform text fields, file uploads, and URL inputs.
+- **Rate limiting** — Are throttle/rate-limit protections specified for abuse-prone endpoints? Login, password reset, registration, API endpoints, and webhook receivers should all have rate limiting. Flag unthrottled auth endpoints as warnings.
+- **Data exposure** — Do API responses or view specs define which fields are returned? Flag specs that return model data without explicit field whitelisting (`$hidden`, API resources, `->only()`). Sensitive fields (emails, phone numbers, internal IDs, tokens) exposed without justification are errors.
+- **Encryption at rest** — Are sensitive data columns (API keys, OAuth tokens, webhook secrets, PII) stored with encryption? Laravel's `encrypted` cast or equivalent should be specified for secrets. Flag plaintext storage of credentials.
+- **Audit logging** — Do destructive or privilege-sensitive operations (delete records, change roles/permissions, impersonation, billing changes) include audit trail tasks? Flag admin actions without logging as warnings.
+- **CSRF protection** — Are non-GET endpoints protected? Livewire handles CSRF automatically, but custom routes and API endpoints need explicit mention. Flag specs defining POST/PUT/DELETE routes without CSRF or token-based auth.
+- **XSS surface** — Do specs mention rendering user-provided content (comments, names, rich text)? Flag if output encoding or sanitization isn't mentioned. Blade's `{{ }}` escapes by default, but `{!! !!}` does not — flag specs that imply raw HTML rendering.
+- **File upload safety** — If specs describe file uploads: is file type validation specified? Size limits? Storage location (public vs private disk)? Flag uploads stored in public directories without access control.
+- **Secret management** — Are API keys, third-party credentials, and signing secrets stored in `.env` / config? Flag specs that hardcode secrets or don't specify where credentials are stored.
+- **CORS and security headers** — Do specs for API endpoints or embeddable content address CORS configuration? Are CSP headers mentioned for pages rendering external content or scripts?
+- **Test coverage** — Do specs include tasks for testing rate limiting effectiveness, input validation rejection, permission boundary enforcement, and XSS/injection prevention? Flag security-sensitive features (auth, payments, admin actions) without explicit security test tasks.
 
 ## Output Format
 
@@ -190,7 +289,8 @@ The `mode` field is `"full"` or `"partial"` (see "Partial vs Full Audit" above).
 - **info**: Nice to fix, stylistic, or architectural observations (e.g., open decisions not tracked, minor format inconsistencies)
 
 ### Dimension Values
-Use exactly these dimension names: `structure`, `cross-reference`, `dependencies`, `completeness`, `decisions`, `content`
+Core dimensions: `structure`, `cross-reference`, `dependencies`, `completeness`, `decisions`, `content`
+Specialist dimensions: `specialist:database`, `specialist:auth`, `specialist:queue`, `specialist:billing`, `specialist:security`
 
 ## Review Flow
 
