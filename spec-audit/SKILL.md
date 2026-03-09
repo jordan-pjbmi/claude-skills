@@ -97,6 +97,14 @@ Domain-specific lenses that catch issues generic checks miss — they require un
 
 **Output:** Specialist findings use dimension `specialist:{domain}` (e.g., `specialist:database`). They follow the same severity, fingerprint, and output rules as core findings. Add specialist dimensions to the `by_dimension` summary counts.
 
+**Web research:** Specialist auditors deal with libraries, frameworks, and APIs that evolve — version-specific behavior, deprecated patterns, changed defaults. Rather than relying on baked-in knowledge that may be outdated, each specialist subagent should use WebSearch and/or WebFetch to verify current information before flagging version-sensitive issues. Specifically:
+- Look up the **current stable version** of relevant packages (Laravel, Cashier, Spatie, Horizon, Stripe API, etc.) and check changelogs or upgrade guides for breaking changes
+- Verify framework defaults and conventions against **official docs** rather than assuming (e.g., UUID version defaults, middleware configuration location, Stripe API version pinning)
+- When a spec references a specific version or pattern, confirm whether it's current or outdated by checking the source
+- Include the version/source you verified against in the finding's `detail` field so the audit stays traceable (e.g., "As of Laravel 12.x docs: …" or "Per Cashier 16.x changelog: …")
+
+This keeps audits accurate regardless of when the skill was last updated. A few extra seconds of research prevents false positives from stale assumptions.
+
 ### Database / Schema / Migration
 
 **Activates when:** specs mention migrations, database tables, columns, indexes, foreign keys, schema changes, seeders, or model relationships.
@@ -105,7 +113,7 @@ Checks:
 
 - **Migration ordering** — Stories creating foreign keys must depend on stories that create the referenced tables. A migration adding a `user_id` FK must run after the users table migration. Look for implicit ordering not captured in Dependencies sections.
 - **Rollback safety** — Are destructive migrations (dropping columns, changing types) acknowledged? If a migration transforms data, is the reverse path addressed or explicitly marked irreversible?
-- **Column types** — Appropriate types for the data described: `decimal` for money (not `float`), `json` for flexible structures, `timestamp` for time data. Laravel 12's `HasUuids` trait defaults to UUIDv7 (ordered) — specs assuming v4 UUIDs should be flagged.
+- **Column types** — Appropriate types for the data described: `decimal` for money (not `float`), `json` for flexible structures, `timestamp` for time data. Check the current Laravel version's UUID behavior (`HasUuids` trait) — if the default UUID version has changed, flag specs that assume the old behavior.
 - **Index coverage** — If acceptance criteria mention filtering or querying by specific fields, is there a task to add the corresponding index? Flag missing composite indexes for multi-column lookups (especially `[tenant_id, ...]` patterns).
 - **Multi-tenant isolation** — For tenant-scoped tables: is the tenant identifier column specified? Are unique constraints tenant-aware (e.g., unique email per org, not globally)? Are global scopes mentioned to prevent cross-tenant queries?
 - **Soft delete awareness** — If specs say "deactivate" or "archive" rather than "delete", is `SoftDeletes` specified? Unique indexes on soft-deletable models need to account for deleted records (partial indexes or include `deleted_at`).
@@ -121,7 +129,7 @@ Checks:
 - **Permission completeness** — If a feature restricts access ("only admins can…"), is there a corresponding permission defined? Are permission names consistent across all specs (no `manage-users` in one place and `users.manage` in another)?
 - **Spatie teams mode pitfalls** — If using Spatie laravel-permission with `teams: true`: is there a spec for where `setPermissionsTeamId()` gets called (middleware, service provider)? Is permission cache separation per tenant addressed? After switching team context, cached roles/permissions on user model relations must be unset — flag if not mentioned.
 - **Role hierarchy** — Are roles defined with clear capabilities? If "manager" inherits from "editor", is that explicit? Are there global roles (super-admin) that bypass tenant scoping, and is that interaction defined?
-- **Middleware configuration** — Laravel 11+ configures middleware in `bootstrap/app.php` (not `Kernel.php`). Specs referencing `Kernel.php` or `Auth::routes()` are outdated. Are protected routes explicitly listed or grouped?
+- **Middleware configuration** — Verify the current Laravel middleware configuration approach (it has moved across versions — e.g., `Kernel.php` vs `bootstrap/app.php`). Flag specs referencing outdated patterns. Are protected routes explicitly listed or grouped?
 - **Guard separation** — If admin and user auth are separate (e.g., Filament admin panel vs main app), are separate guards defined? Do specs clarify which guard each auth flow uses?
 - **2FA and session lifecycle** — If specs mention 2FA, are recovery codes, single-use enforcement, and re-authentication flows specified? Is session expiry / token refresh addressed?
 - **Test coverage** — Do specs include tasks for testing permission boundaries (user A can't access user B's resources), role assignment/revocation, guard isolation, and tenant-scoping enforcement? Flag multi-tenant auth specs without cross-tenant access tests.
@@ -151,9 +159,9 @@ Checks:
 - **Subscription lifecycle** — Are all states defined (trialing, active, past_due, canceled, incomplete, paused)? What changes in the UI and access control for each state? Flag specs that only define the happy path (subscribe → active) without addressing failures or cancellations.
 - **Plan transitions** — Is upgrade/downgrade behavior explicit? Proration (immediate charge vs end-of-cycle), feature access during grace periods, and what happens to in-flight usage on plan change.
 - **Trial handling** — Are trial periods, trial-to-paid conversion, and expired-trial behavior specified? Note: Cashier checkout sessions + `trial_end` + `billing_cycle_anchor` don't work together (known Cashier limitation) — flag if specs combine these.
-- **Metered billing** — If applicable: Cashier 16 changed metered billing to use `Stripe\V2\Billing\MeterEvent` and requires `meter_event_name`/`meter_id` columns on `subscription_items`. Flag specs that don't account for this schema requirement.
+- **Metered billing** — If applicable: look up the current Cashier version's metered billing approach (API classes, required schema columns on `subscription_items`). Flag specs that use outdated metered billing patterns.
 - **Multi-tenant billing** — Do Stripe customers map to users or to organizations/tenants? Is this explicit? Can one org have multiple subscriptions, or one per tenant?
-- **Stripe API version** — Cashier 16 uses Stripe API `2025-07-30.basil`. Flag specs referencing older Stripe patterns or not addressing API version pinning.
+- **Stripe API version** — Check the current Cashier version's pinned Stripe API version. Flag specs referencing older Stripe patterns or not addressing API version pinning.
 - **Test coverage** — Do specs include tasks for testing webhook signature verification, subscription state transitions, failed payment handling, and plan change proration? Flag billing specs that only test the happy path (successful charge) without failure scenarios.
 
 ### Security
