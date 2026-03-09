@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spec Audit Review</title>
+  <style>
+    :root {
+      --bg: #faf9f5;
+      --surface: #ffffff;
+      --border: #e8e6dc;
+      --text: #1a1a19;
+      --text-muted: #888880;
+      --accent: #d97757;
+      --accent-hover: #c4613f;
+      --green: #5a8a4a;
+      --green-bg: #eef2e8;
+      --yellow: #b8860b;
+      --yellow-bg: #fdf6e3;
+      --red: #c44;
+      --red-bg: #fceaea;
+      --blue: #4a7ab5;
+      --blue-bg: #eaf0f8;
+      --gray: #888;
+      --gray-bg: #f0efeb;
+      --purple: #7b5ea7;
+      --purple-bg: #f0eaf8;
+      --header-bg: #1a1a19;
+      --header-text: #faf9f5;
+      --radius: 6px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    .header {
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .header h1 { font-size: 1.2rem; font-weight: 600; }
+    .header-stats {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.85rem;
+      opacity: 0.8;
+    }
+    .header-stats .stat-value { font-weight: 600; opacity: 1; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      flex-shrink: 0;
+    }
+    .tab {
+      padding: 0.75rem 1.5rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Main layout */
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 320px;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+    .sidebar-section {
+      padding: 0.75rem 1rem 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+    .finding-item {
+      padding: 0.6rem 1rem;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-size: 0.85rem;
+      transition: background 0.1s;
+    }
+    .finding-item:hover { background: var(--bg); }
+    .finding-item.active {
+      background: var(--bg);
+      border-left-color: var(--accent);
+    }
+    .finding-item .severity-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 5px;
+    }
+    .severity-dot.error { background: var(--red); }
+    .severity-dot.warning { background: var(--yellow); }
+    .severity-dot.info { background: var(--blue); }
+    .finding-item .finding-title { flex: 1; line-height: 1.4; }
+    .finding-item .response-badge {
+      font-size: 0.7rem;
+      padding: 1px 6px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+    .response-badge.accept { background: var(--green-bg); color: var(--green); }
+    .response-badge.dismiss { background: var(--gray-bg); color: var(--gray); }
+    .response-badge.defer { background: var(--yellow-bg); color: var(--yellow); }
+    .response-badge.other { background: var(--purple-bg); color: var(--purple); }
+    .response-badge.prior { background: var(--gray-bg); color: var(--text-muted); opacity: 0.6; font-style: italic; }
+
+    /* Carried-forward sidebar styling */
+    .finding-item.carried {
+      border-left: 3px dashed var(--text-muted);
+    }
+    .finding-item.carried.active {
+      border-left-color: var(--accent);
+    }
+    .carried-label {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      font-style: italic;
+      flex-shrink: 0;
+    }
+
+    /* Prior response banner */
+    .prior-response-banner {
+      background: var(--yellow-bg);
+      border: 1px solid var(--yellow);
+      border-radius: var(--radius);
+      padding: 0.6rem 1rem;
+      font-size: 0.85rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .prior-response-banner .prior-action {
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    /* Carried-forward info notice */
+    .carried-notice {
+      background: var(--blue-bg);
+      border: 1px solid var(--blue);
+      border-radius: var(--radius);
+      padding: 0.6rem 1rem;
+      font-size: 0.85rem;
+      margin-bottom: 1.25rem;
+    }
+
+    /* Detail panel */
+    .detail {
+      flex: 1;
+      overflow-y: auto;
+      padding: 2rem 3rem;
+    }
+    .detail-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      font-size: 1.1rem;
+    }
+
+    .finding-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .finding-id {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      font-family: monospace;
+    }
+    .severity-badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 3px;
+      text-transform: uppercase;
+    }
+    .severity-badge.error { background: var(--red-bg); color: var(--red); }
+    .severity-badge.warning { background: var(--yellow-bg); color: var(--yellow); }
+    .severity-badge.info { background: var(--blue-bg); color: var(--blue); }
+    .dimension-badge {
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 3px;
+      background: var(--gray-bg);
+      color: var(--text-muted);
+    }
+
+    .finding-title-large {
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      line-height: 1.3;
+    }
+
+    .finding-section {
+      margin-bottom: 1.25rem;
+    }
+    .finding-section h3 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+    .finding-section p, .finding-section .content {
+      font-size: 0.95rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .finding-location {
+      font-family: monospace;
+      font-size: 0.85rem;
+      background: var(--bg);
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+    .finding-suggestion {
+      background: var(--green-bg);
+      padding: 0.75rem 1rem;
+      border-radius: var(--radius);
+      border-left: 3px solid var(--green);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    /* Response controls */
+    .response-controls {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+    .response-controls h3 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+    }
+    .response-buttons {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .response-btn {
+      padding: 0.5rem 1.25rem;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .response-btn:hover { border-color: var(--text-muted); }
+    .response-btn.selected-accept {
+      background: var(--green-bg);
+      border-color: var(--green);
+      color: var(--green);
+    }
+    .response-btn.selected-dismiss {
+      background: var(--gray-bg);
+      border-color: var(--gray);
+      color: var(--gray);
+    }
+    .response-btn.selected-defer {
+      background: var(--yellow-bg);
+      border-color: var(--yellow);
+      color: var(--yellow);
+    }
+    .response-btn.selected-other {
+      background: var(--purple-bg);
+      border-color: var(--purple);
+      color: var(--purple);
+    }
+    .response-notes {
+      width: 100%;
+      min-height: 80px;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-family: inherit;
+      font-size: 0.9rem;
+      resize: vertical;
+      background: var(--surface);
+    }
+    .response-notes:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* Summary tab */
+    .summary-panel {
+      padding: 2rem 3rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .summary-panel h2 {
+      font-size: 1.3rem;
+      margin-bottom: 1.5rem;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .summary-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      text-align: center;
+    }
+    .summary-card .big-number {
+      font-size: 2rem;
+      font-weight: 700;
+    }
+    .summary-card .label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+    .summary-card.error .big-number { color: var(--red); }
+    .summary-card.warning .big-number { color: var(--yellow); }
+    .summary-card.info .big-number { color: var(--blue); }
+    .summary-card.accepted .big-number { color: var(--green); }
+    .summary-card.dismissed .big-number { color: var(--gray); }
+    .summary-card.deferred .big-number { color: var(--yellow); }
+    .summary-card.other .big-number { color: var(--purple); }
+
+    .dimension-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 2rem;
+    }
+    .dimension-table th, .dimension-table td {
+      padding: 0.5rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .dimension-table th {
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+
+    /* History tab */
+    .history-panel {
+      padding: 2rem 3rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .history-panel h2 {
+      font-size: 1.3rem;
+      margin-bottom: 1.5rem;
+    }
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .history-table th, .history-table td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .history-table th {
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+    .history-table tr.clickable {
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .history-table tr.clickable:hover { background: var(--bg); }
+    .history-table tr.active-audit { background: var(--bg); }
+    .status-badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 3px;
+      text-transform: uppercase;
+    }
+    .status-badge.complete { background: var(--green-bg); color: var(--green); }
+    .status-badge.pending { background: var(--yellow-bg); color: var(--yellow); }
+    .severity-counts {
+      display: flex;
+      gap: 0.75rem;
+      font-size: 0.8rem;
+    }
+    .severity-counts .sev-count {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    /* Submit bar */
+    .submit-bar {
+      padding: 0.75rem 2rem;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .submit-bar .progress-text {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .submit-btn {
+      padding: 0.6rem 2rem;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .submit-btn:hover { background: var(--accent-hover); }
+    .submit-btn:disabled {
+      background: var(--border);
+      cursor: not-allowed;
+    }
+
+    /* Keyboard nav hint */
+    .nav-hint {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      padding: 0.5rem 1rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+
+    /* Hide panels */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Spec Audit Review — <span id="scope"></span></h1>
+    <div class="header-stats">
+      <span><span class="stat-value" id="total-findings">0</span> findings</span>
+      <span><span class="stat-value" id="specs-count">0</span> specs audited</span>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs-bar">
+    <div class="tab active" data-tab="findings">Findings</div>
+    <div class="tab" data-tab="summary">Summary</div>
+  </div>
+
+  <div class="main" id="findings-panel">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="detail" id="detail">
+      <div class="detail-empty">Select a finding from the sidebar</div>
+    </div>
+  </div>
+
+  <div class="main hidden" id="summary-panel">
+    <div class="summary-panel" id="summary-content"></div>
+  </div>
+
+  <div class="main hidden" id="history-panel">
+    <div class="history-panel" id="history-content"></div>
+  </div>
+
+  <div class="submit-bar">
+    <span class="progress-text" id="progress-text">0 / 0 reviewed</span>
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <span class="nav-hint">Arrow keys to navigate, 1/2/3/4 for accept/dismiss/defer/other</span>
+      <button class="submit-btn" id="submit-btn">Submit All Responses</button>
+    </div>
+  </div>
+
+  <script>
+    /*__EMBEDDED_DATA__*/
+
+    // History mode detection
+    const historyIndex = EMBEDDED_DATA.history_index;
+    const allAudits = EMBEDDED_DATA.all_audits || {};
+    const allResponses = EMBEDDED_DATA.all_responses || {};
+    const isHistoryMode = historyIndex !== null && historyIndex !== undefined;
+
+    // Current audit state
+    let audit = EMBEDDED_DATA.audit;
+    let findings = audit.findings || [];
+    let currentAuditId = audit.id || null;
+
+    // State: responses keyed by finding ID
+    let responses = {};
+
+    function initResponses() {
+      const existingResponses = isHistoryMode && currentAuditId
+        ? (allResponses[currentAuditId] || {})
+        : (EMBEDDED_DATA.existing_responses || {});
+
+      responses = {};
+      findings.forEach(f => {
+        if (existingResponses.responses) {
+          const existing = existingResponses.responses.find(r => r.finding_id === f.id);
+          if (existing) {
+            responses[f.id] = { action: existing.action, notes: existing.notes || '' };
+            return;
+          }
+        }
+        // Auto-populate dismiss for previously-dismissed findings
+        if (f.prior_response && f.prior_response.action === 'dismiss') {
+          responses[f.id] = { action: 'dismiss', notes: '' };
+          return;
+        }
+        responses[f.id] = { action: null, notes: '' };
+      });
+    }
+    initResponses();
+
+    let activeFindingId = null;
+
+    // Populate header
+    function updateHeader() {
+      document.getElementById('scope').textContent = audit.scope || 'Unknown';
+      document.getElementById('total-findings').textContent = findings.length;
+      document.getElementById('specs-count').textContent = (audit.specs_audited || []).length;
+    }
+    updateHeader();
+
+    // Add History tab if in history mode
+    if (isHistoryMode) {
+      const tabsBar = document.getElementById('tabs-bar');
+      const historyTab = document.createElement('div');
+      historyTab.className = 'tab';
+      historyTab.dataset.tab = 'history';
+      historyTab.textContent = 'History';
+      tabsBar.appendChild(historyTab);
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const target = tab.dataset.tab;
+        document.getElementById('findings-panel').classList.toggle('hidden', target !== 'findings');
+        document.getElementById('summary-panel').classList.toggle('hidden', target !== 'summary');
+        document.getElementById('history-panel').classList.toggle('hidden', target !== 'history');
+        if (target === 'summary') renderSummary();
+        if (target === 'history') renderHistory();
+      });
+    });
+
+    // Group findings by severity
+    let groups = { error: [], warning: [], info: [] };
+    function rebuildGroups() {
+      groups = { error: [], warning: [], info: [] };
+      findings.forEach(f => {
+        const sev = f.severity || 'info';
+        if (!groups[sev]) groups[sev] = [];
+        groups[sev].push(f);
+      });
+    }
+    rebuildGroups();
+
+    // Switch to a different audit (history mode)
+    function switchAudit(auditId) {
+      if (!allAudits[auditId]) return;
+      currentAuditId = auditId;
+      audit = allAudits[auditId];
+      findings = audit.findings || [];
+      initResponses();
+      rebuildGroups();
+      updateHeader();
+      activeFindingId = null;
+      renderSidebar();
+      updateProgress();
+
+      // Show the first finding
+      const detail = document.getElementById('detail');
+      const allFindings = [...(groups.error || []), ...(groups.warning || []), ...(groups.info || [])];
+      if (allFindings.length > 0) {
+        selectFinding(allFindings[0].id);
+      } else {
+        detail.innerHTML = '<div class="detail-empty">No findings in this audit</div>';
+      }
+
+      // Switch to findings tab
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelector('[data-tab="findings"]').classList.add('active');
+      document.getElementById('findings-panel').classList.remove('hidden');
+      document.getElementById('summary-panel').classList.add('hidden');
+      document.getElementById('history-panel').classList.add('hidden');
+    }
+
+    // Build sidebar
+    function renderSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.innerHTML = '';
+      const labels = { error: 'Errors', warning: 'Warnings', info: 'Info' };
+      ['error', 'warning', 'info'].forEach(sev => {
+        if (!groups[sev] || groups[sev].length === 0) return;
+        const section = document.createElement('div');
+        section.className = 'sidebar-section';
+        section.textContent = `${labels[sev]} (${groups[sev].length})`;
+        sidebar.appendChild(section);
+
+        groups[sev].forEach(f => {
+          const isCarried = f.carried_forward === true;
+          const item = document.createElement('div');
+          item.className = 'finding-item' + (f.id === activeFindingId ? ' active' : '') + (isCarried ? ' carried' : '');
+          item.dataset.id = f.id;
+
+          const dot = document.createElement('div');
+          dot.className = `severity-dot ${sev}`;
+
+          const title = document.createElement('div');
+          title.className = 'finding-title';
+          title.textContent = f.title;
+
+          item.appendChild(dot);
+          item.appendChild(title);
+
+          // Show carried label
+          if (isCarried) {
+            const carried = document.createElement('span');
+            carried.className = 'carried-label';
+            carried.textContent = 'carried';
+            item.appendChild(carried);
+          }
+
+          const resp = responses[f.id];
+          if (resp && resp.action) {
+            const badge = document.createElement('span');
+            badge.className = `response-badge ${resp.action}`;
+            badge.textContent = resp.action;
+            item.appendChild(badge);
+          } else if (f.prior_response && !resp?.action) {
+            // Show faded prior response badge
+            const badge = document.createElement('span');
+            badge.className = 'response-badge prior';
+            badge.textContent = f.prior_response.action;
+            item.appendChild(badge);
+          }
+
+          item.addEventListener('click', () => selectFinding(f.id));
+          sidebar.appendChild(item);
+        });
+      });
+    }
+
+    // Render finding detail
+    function selectFinding(id) {
+      activeFindingId = id;
+      renderSidebar();
+
+      const f = findings.find(x => x.id === id);
+      if (!f) return;
+
+      const detail = document.getElementById('detail');
+      const resp = responses[id] || { action: null, notes: '' };
+
+      // Prior response banner
+      let priorHtml = '';
+      if (f.prior_response) {
+        const pr = f.prior_response;
+        const notesSnippet = pr.notes ? ` — "${escapeHtml(pr.notes)}"` : '';
+        priorHtml = `
+          <div class="prior-response-banner">
+            Previously <span class="prior-action">${escapeHtml(pr.action)}</span> in audit ${escapeHtml(pr.audit_id || '?')}${notesSnippet}
+          </div>`;
+      }
+
+      // Carried-forward notice
+      let carriedHtml = '';
+      if (f.carried_forward) {
+        carriedHtml = `
+          <div class="carried-notice">
+            Carried forward from audit ${escapeHtml(f.carried_from_audit || '?')} — not re-evaluated in this audit
+          </div>`;
+      }
+
+      let locationHtml = '';
+      if (f.location) {
+        const parts = [];
+        if (f.location.file) parts.push(`File: ${f.location.file}`);
+        if (f.location.section) parts.push(`Section: ${f.location.section}`);
+        if (f.location.stories_affected && f.location.stories_affected.length) {
+          parts.push(`Stories: ${f.location.stories_affected.join(', ')}`);
+        }
+        if (parts.length) {
+          locationHtml = `
+            <div class="finding-section">
+              <h3>Location</h3>
+              <div class="finding-location">${escapeHtml(parts.join('\n'))}</div>
+            </div>`;
+        }
+      }
+
+      let suggestionHtml = '';
+      if (f.suggestion) {
+        suggestionHtml = `
+          <div class="finding-section">
+            <h3>Suggestion</h3>
+            <div class="finding-suggestion">${escapeHtml(f.suggestion)}</div>
+          </div>`;
+      }
+
+      detail.innerHTML = `
+        ${priorHtml}
+        ${carriedHtml}
+        <div class="finding-header">
+          <span class="finding-id">${escapeHtml(f.id)}</span>
+          <span class="severity-badge ${f.severity || 'info'}">${f.severity || 'info'}</span>
+          <span class="dimension-badge">${escapeHtml(f.dimension || '')}</span>
+        </div>
+        <div class="finding-title-large">${escapeHtml(f.title)}</div>
+        <div class="finding-section">
+          <h3>Detail</h3>
+          <div class="content">${escapeHtml(f.detail || 'No detail provided.')}</div>
+        </div>
+        ${locationHtml}
+        ${suggestionHtml}
+        <div class="response-controls">
+          <h3>Your Response</h3>
+          <div class="response-buttons">
+            <button class="response-btn ${resp.action === 'accept' ? 'selected-accept' : ''}"
+                    data-action="accept" onclick="setAction('${f.id}', 'accept')">Accept</button>
+            <button class="response-btn ${resp.action === 'dismiss' ? 'selected-dismiss' : ''}"
+                    data-action="dismiss" onclick="setAction('${f.id}', 'dismiss')">Dismiss</button>
+            <button class="response-btn ${resp.action === 'defer' ? 'selected-defer' : ''}"
+                    data-action="defer" onclick="setAction('${f.id}', 'defer')">Defer</button>
+            <button class="response-btn ${resp.action === 'other' ? 'selected-other' : ''}"
+                    data-action="other" onclick="setAction('${f.id}', 'other')">Other</button>
+          </div>
+          <textarea class="response-notes" placeholder="Add notes (optional)..."
+                    oninput="setNotes('${f.id}', this.value)">${escapeHtml(resp.notes)}</textarea>
+        </div>`;
+
+      updateProgress();
+    }
+
+    function setAction(id, action) {
+      if (responses[id].action === action) {
+        responses[id].action = null;
+      } else {
+        responses[id].action = action;
+      }
+      selectFinding(id);
+      autoSave();
+    }
+
+    function setNotes(id, notes) {
+      responses[id].notes = notes;
+      autoSave();
+    }
+
+    function updateProgress() {
+      const reviewed = Object.values(responses).filter(r => r.action !== null).length;
+      document.getElementById('progress-text').textContent = `${reviewed} / ${findings.length} reviewed`;
+    }
+
+    // Auto-save responses periodically
+    let saveTimeout = null;
+    function autoSave() {
+      if (saveTimeout) clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(doSave, 1000);
+      // Reset submit button when user makes changes after submitting
+      const btn = document.getElementById('submit-btn');
+      if (btn.textContent === 'Submitted!') {
+        btn.textContent = 'Submit All Responses';
+        btn.style.background = '';
+        btn.disabled = false;
+      }
+    }
+
+    function buildPayload(status) {
+      const payload = {
+        audit_scope: audit.scope,
+        audit_date: audit.audit_date,
+        submitted_at: new Date().toISOString(),
+        responses: findings.map(f => ({
+          finding_id: f.id,
+          action: responses[f.id].action,
+          notes: responses[f.id].notes
+        }))
+      };
+      if (status) payload.status = status;
+      if (currentAuditId) payload.audit_id = currentAuditId;
+      return payload;
+    }
+
+    function doSave() {
+      fetch('/api/responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload())
+      }).catch(() => {});
+    }
+
+    // Submit button
+    document.getElementById('submit-btn').addEventListener('click', () => {
+      const btn = document.getElementById('submit-btn');
+      btn.textContent = 'Saving...';
+      btn.disabled = true;
+
+      const payload = buildPayload('complete');
+
+      fetch('/api/responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(res => {
+        if (!res.ok) throw new Error('Save failed');
+        btn.textContent = 'Submitted!';
+        btn.style.background = 'var(--green)';
+
+        // Update local history index status
+        if (isHistoryMode && currentAuditId) {
+          const entry = historyIndex.find(e => e.id === currentAuditId);
+          if (entry) entry.status = 'complete';
+        }
+      }).catch(() => {
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'responses.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        btn.textContent = 'Downloaded!';
+        btn.style.background = 'var(--green)';
+      });
+    });
+
+    // Summary tab
+    function renderSummary() {
+      const panel = document.getElementById('summary-content');
+      const bySev = audit.summary?.by_severity || {};
+      const byDim = audit.summary?.by_dimension || {};
+
+      const accepted = Object.values(responses).filter(r => r.action === 'accept').length;
+      const dismissed = Object.values(responses).filter(r => r.action === 'dismiss').length;
+      const deferred = Object.values(responses).filter(r => r.action === 'defer').length;
+      const other = Object.values(responses).filter(r => r.action === 'other').length;
+      const pending = findings.length - accepted - dismissed - deferred - other;
+
+      const carriedCount = findings.filter(f => f.carried_forward === true).length;
+      const newCount = findings.length - carriedCount;
+      const modeLabel = audit.mode === 'partial' ? 'Partial' : 'Full';
+
+      panel.innerHTML = `
+        <h2>Audit Summary</h2>
+        ${carriedCount > 0 ? `<p style="font-size:0.9rem;color:var(--text-muted);margin-bottom:1rem;">${modeLabel} audit: ${newCount} new, ${carriedCount} carried forward</p>` : ''}
+        <h3 style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">By Severity</h3>
+        <div class="summary-grid">
+          <div class="summary-card error">
+            <div class="big-number">${bySev.error || 0}</div>
+            <div class="label">Errors</div>
+          </div>
+          <div class="summary-card warning">
+            <div class="big-number">${bySev.warning || 0}</div>
+            <div class="label">Warnings</div>
+          </div>
+          <div class="summary-card info">
+            <div class="big-number">${bySev.info || 0}</div>
+            <div class="label">Info</div>
+          </div>
+        </div>
+        <h3 style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">Review Progress</h3>
+        <div class="summary-grid">
+          <div class="summary-card accepted">
+            <div class="big-number">${accepted}</div>
+            <div class="label">Accepted</div>
+          </div>
+          <div class="summary-card dismissed">
+            <div class="big-number">${dismissed}</div>
+            <div class="label">Dismissed</div>
+          </div>
+          <div class="summary-card deferred">
+            <div class="big-number">${deferred}</div>
+            <div class="label">Deferred</div>
+          </div>
+          <div class="summary-card other">
+            <div class="big-number">${other}</div>
+            <div class="label">Other</div>
+          </div>
+          <div class="summary-card">
+            <div class="big-number">${pending}</div>
+            <div class="label">Pending</div>
+          </div>
+        </div>
+        <h3 style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">By Dimension</h3>
+        <table class="dimension-table">
+          <thead><tr><th>Dimension</th><th>Count</th></tr></thead>
+          <tbody>
+            ${Object.entries(byDim).map(([dim, count]) =>
+              `<tr><td>${escapeHtml(dim)}</td><td>${count}</td></tr>`
+            ).join('')}
+          </tbody>
+        </table>
+        <h3 style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">Specs Audited</h3>
+        <div style="font-family:monospace;font-size:0.85rem;line-height:1.8;">
+          ${(audit.specs_audited || []).map(s => escapeHtml(s)).join('<br>')}
+        </div>`;
+    }
+
+    // History tab
+    function renderHistory() {
+      const panel = document.getElementById('history-content');
+      if (!isHistoryMode || !historyIndex || historyIndex.length === 0) {
+        panel.innerHTML = '<div class="detail-empty">No audit history available</div>';
+        return;
+      }
+
+      const sorted = [...historyIndex].sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+      const rows = sorted.map(entry => {
+        const bySev = entry.by_severity || {};
+        const isActive = entry.id === currentAuditId;
+        const mode = entry.mode || 'full';
+        return `
+          <tr class="clickable ${isActive ? 'active-audit' : ''}" onclick="switchAudit('${escapeHtml(entry.id)}')">
+            <td style="font-family:monospace;font-weight:${isActive ? '700' : '400'}">${escapeHtml(entry.id)}</td>
+            <td>${escapeHtml(entry.date || '')}</td>
+            <td>${escapeHtml(entry.scope || '')}</td>
+            <td>${escapeHtml(mode)}</td>
+            <td>
+              <div class="severity-counts">
+                ${bySev.error ? `<span class="sev-count"><span class="severity-dot error"></span>${bySev.error}</span>` : ''}
+                ${bySev.warning ? `<span class="sev-count"><span class="severity-dot warning"></span>${bySev.warning}</span>` : ''}
+                ${bySev.info ? `<span class="sev-count"><span class="severity-dot info"></span>${bySev.info}</span>` : ''}
+              </div>
+            </td>
+            <td>${entry.total_findings || 0}</td>
+            <td><span class="status-badge ${entry.status || 'pending'}">${entry.status || 'pending'}</span></td>
+          </tr>`;
+      }).join('');
+
+      panel.innerHTML = `
+        <h2>Audit History</h2>
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Audit ID</th>
+              <th>Date</th>
+              <th>Scope</th>
+              <th>Mode</th>
+              <th>Findings</th>
+              <th>Total</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'TEXTAREA') return;
+
+      const allFindings = [...(groups.error || []), ...(groups.warning || []), ...(groups.info || [])];
+      const currentIdx = allFindings.findIndex(f => f.id === activeFindingId);
+
+      if (e.key === 'ArrowDown' || e.key === 'j') {
+        e.preventDefault();
+        const next = currentIdx < allFindings.length - 1 ? currentIdx + 1 : 0;
+        selectFinding(allFindings[next].id);
+      } else if (e.key === 'ArrowUp' || e.key === 'k') {
+        e.preventDefault();
+        const prev = currentIdx > 0 ? currentIdx - 1 : allFindings.length - 1;
+        selectFinding(allFindings[prev].id);
+      } else if (e.key === '1' && activeFindingId) {
+        setAction(activeFindingId, 'accept');
+      } else if (e.key === '2' && activeFindingId) {
+        setAction(activeFindingId, 'dismiss');
+      } else if (e.key === '3' && activeFindingId) {
+        setAction(activeFindingId, 'defer');
+      } else if (e.key === '4' && activeFindingId) {
+        setAction(activeFindingId, 'other');
+      }
+    });
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Init
+    renderSidebar();
+    updateProgress();
+    if (findings.length > 0) {
+      const allFindings = [...(groups.error || []), ...(groups.warning || []), ...(groups.info || [])];
+      selectFinding(allFindings[0].id);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Revat Build Progress</title>
+<style>
+  :root {
+    --done: #22c55e;
+    --progress: #3b82f6;
+    --blocked: #ef4444;
+    --gray: #9ca3af;
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --border: #334155;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 2rem; max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .subtitle { color: var(--muted); font-size: 0.875rem; margin-bottom: 1.5rem; }
+
+  /* Progress bar */
+  .progress-bar-container { background: var(--surface); border-radius: 8px; height: 28px; margin-bottom: 2rem; overflow: hidden; border: 1px solid var(--border); position: relative; }
+  .progress-bar-fill { height: 100%; background: var(--done); transition: width 0.3s; border-radius: 8px 0 0 8px; }
+  .progress-bar-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600; }
+
+  /* Accordion */
+  details { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.75rem; }
+  details[open] { border-color: var(--progress); }
+  summary { padding: 0.875rem 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; list-style: none; user-select: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸"; font-size: 0.75rem; color: var(--muted); transition: transform 0.15s; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  .epic-id { font-weight: 700; font-size: 0.8rem; color: var(--muted); min-width: 2rem; }
+  .epic-title { flex: 1; font-weight: 600; }
+  .epic-count { font-size: 0.8rem; color: var(--muted); margin-right: 0.5rem; }
+
+  /* Badge */
+  .badge { font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
+  .badge-done { background: var(--done); color: #052e16; }
+  .badge-complete { background: var(--done); color: #052e16; }
+  .badge-in-progress { background: var(--progress); color: #eff6ff; }
+  .badge-blocked { background: var(--blocked); color: #fef2f2; }
+  .badge-not-started { background: var(--border); color: var(--muted); }
+
+  /* Story table */
+  .story-table { width: 100%; border-collapse: collapse; }
+  .story-table th { text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.5rem 1rem; border-bottom: 1px solid var(--border); }
+  .story-table td { padding: 0.5rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+  .story-table tr:last-child td { border-bottom: none; }
+  .story-id { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
+  .layer { color: var(--muted); font-size: 0.8rem; }
+
+  .empty { color: var(--muted); padding: 1rem; text-align: center; font-style: italic; font-size: 0.875rem; }
+  .error { color: var(--blocked); padding: 2rem; text-align: center; }
+</style>
+</head>
+<body>
+<h1 id="title">Loading...</h1>
+<div class="subtitle" id="updated"></div>
+<div class="progress-bar-container">
+  <div class="progress-bar-fill" id="bar"></div>
+  <div class="progress-bar-label" id="bar-label"></div>
+</div>
+<div id="epics"></div>
+
+<script>
+const STATUS_DISPLAY = {
+  'not-started': 'Not Started',
+  'in-progress': 'In Progress',
+  'done': 'Done',
+  'blocked': 'Blocked',
+};
+
+function badgeClass(status) {
+  return 'badge badge-' + status;
+}
+
+function epicStatus(stories) {
+  if (!stories.length) return 'not-started';
+  const s = stories.map(st => st.status);
+  if (s.every(x => x === 'done')) return 'complete';
+  if (s.some(x => x === 'blocked') && !s.some(x => x === 'in-progress')) return 'blocked';
+  if (s.some(x => x === 'done' || x === 'in-progress')) return 'in-progress';
+  return 'not-started';
+}
+
+function epicStatusDisplay(status) {
+  if (status === 'complete') return 'Complete';
+  return STATUS_DISPLAY[status] || status;
+}
+
+fetch('./progress.json')
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('title').textContent = data.initiative + ' — Progress';
+    document.getElementById('updated').textContent = 'Updated: ' + new Date(data.updated_at).toLocaleDateString();
+
+    // Overall progress
+    let totalStories = 0, doneStories = 0;
+    data.epics.forEach(e => {
+      totalStories += e.stories.length;
+      doneStories += e.stories.filter(s => s.status === 'done').length;
+    });
+    const pct = totalStories ? Math.round((doneStories / totalStories) * 100) : 0;
+    document.getElementById('bar').style.width = pct + '%';
+    document.getElementById('bar-label').textContent = doneStories + ' / ' + totalStories + ' stories (' + pct + '%)';
+
+    // Epics
+    const container = document.getElementById('epics');
+    data.epics.forEach(epic => {
+      const status = epicStatus(epic.stories);
+      const done = epic.stories.filter(s => s.status === 'done').length;
+      const total = epic.stories.length;
+
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.innerHTML = `<span class="epic-id">${epic.id}</span>` +
+        `<span class="epic-title">${epic.title}</span>` +
+        (total ? `<span class="epic-count">${done}/${total}</span>` : '') +
+        `<span class="${badgeClass(status)}">${epicStatusDisplay(status)}</span>`;
+      details.appendChild(summary);
+
+      if (!epic.stories.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'No stories defined yet';
+        details.appendChild(empty);
+      } else {
+        const table = document.createElement('table');
+        table.className = 'story-table';
+        table.innerHTML = '<thead><tr><th>Story</th><th>Layer</th><th>Title</th><th>Status</th></tr></thead>';
+        const tbody = document.createElement('tbody');
+        epic.stories.forEach(s => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td class="story-id">${s.id}</td>` +
+            `<td class="layer">${s.layer}</td>` +
+            `<td>${s.title}</td>` +
+            `<td><span class="${badgeClass(s.status)}">${STATUS_DISPLAY[s.status] || s.status}</span></td>`;
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        details.appendChild(table);
+      }
+      container.appendChild(details);
+    });
+  })
+  .catch(err => {
+    document.getElementById('epics').innerHTML = '<div class="error">Failed to load progress.json. Serve this directory: <code>python3 -m http.server</code></div>';
+  });
+</script>
+</body>
+</html>
