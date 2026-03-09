@@ -3,13 +3,13 @@
 
 Usage:
     python serve_review.py <path-to-audit.json> [--port PORT] [--static <output.html>]
-    python serve_review.py --history <audit-history-dir> [--port PORT]
+    python serve_review.py --history <.spec-audit-dir> [--port PORT]
 
 Reads audit.json, embeds findings into a self-contained HTML page, and serves
 it via a local HTTP server. User responses are saved to responses.json in the
 same directory as audit.json.
 
-When given --history or an audit-history directory, serves the history browser
+When given --history or an .spec-audit directory, serves the history browser
 with all past audits.
 
 No dependencies beyond the Python stdlib.
@@ -212,10 +212,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
 def main() -> None:
     parser = argparse.ArgumentParser(description="Serve spec audit review page")
     parser.add_argument("audit_file", type=Path, nargs="?", default=None,
-                        help="Path to audit.json or audit-history directory")
+                        help="Path to audit.json or .spec-audit directory")
     parser.add_argument("--port", "-p", type=int, default=3118, help="Server port (default: 3118)")
     parser.add_argument("--history", type=Path, default=None,
-                        help="Path to audit-history directory (shorthand for history mode)")
+                        help="Path to .spec-audit directory (shorthand for history mode)")
     parser.add_argument(
         "--static", "-s", type=Path, default=None,
         help="Write standalone HTML to this path instead of starting a server",

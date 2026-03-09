@@ -178,10 +178,10 @@ Checks:
 
 Each audit run generates a unique ID based on the current timestamp: `YYYYMMDD-HHMMSS` (e.g., `20260307-143022`).
 
-Store all findings in `./audit-history/{audit-id}/audit.json` (relative to the current working directory). Also maintain `./audit-history/index.json` as a manifest of all audits. Structure:
+Store all findings in `./.spec-audit/{audit-id}/audit.json` (relative to the current working directory). Also maintain `./.spec-audit/index.json` as a manifest of all audits. Structure:
 
 ```
-audit-history/
+.spec-audit/
 ├── index.json              # [{id, date, scope, total_findings, by_severity, status}]
 ├── 20260307-143022/
 │   ├── audit.json
@@ -264,7 +264,7 @@ For new/re-evaluated findings, omit these fields or set them to `false`/`null`.
 
 ### index.json
 
-After writing `audit.json`, update (or create) `./audit-history/index.json`. Append an entry for the new audit:
+After writing `audit.json`, update (or create) `./.spec-audit/index.json`. Append an entry for the new audit:
 
 ```json
 [
@@ -303,13 +303,13 @@ After writing `audit.json` and updating `index.json`, generate an interactive HT
 Run the bundled script:
 
 ```bash
-python3 ~/.claude/skills/spec-audit/scripts/serve_review.py --history ./audit-history/
+python3 ~/.claude/skills/spec-audit/scripts/serve_review.py --history ./.spec-audit/
 ```
 
 If you need to restart the server with fresh data after generating a new audit:
 
 ```bash
-python3 ~/.claude/skills/spec-audit/scripts/serve_review.py --history ./audit-history/ --relaunch
+python3 ~/.claude/skills/spec-audit/scripts/serve_review.py --history ./.spec-audit/ --relaunch
 ```
 
 To stop the server when the user is done reviewing:
@@ -330,10 +330,10 @@ You can also serve a single audit directly:
 
 ```bash
 python3 ~/.claude/skills/spec-audit/scripts/serve_review.py \
-  ./audit-history/20260307-143022/audit.json
+  ./.spec-audit/20260307-143022/audit.json
 ```
 
-Responses are saved to `./audit-history/{audit-id}/responses.json`.
+Responses are saved to `./.spec-audit/{audit-id}/responses.json`.
 
 ### After Review
 
@@ -347,7 +347,7 @@ When the user says they're done reviewing, read `responses.json` and summarize:
 A standalone script provides cross-audit trend analysis:
 
 ```bash
-python3 ~/.claude/skills/spec-audit/scripts/trend.py <audit-history-dir> [--scope SCOPE]
+python3 ~/.claude/skills/spec-audit/scripts/trend.py <.spec-audit-dir> [--scope SCOPE]
 ```
 
 This outputs:

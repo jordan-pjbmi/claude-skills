@@ -2,7 +2,7 @@
 """Trend analysis for spec audit history.
 
 Usage:
-    python3 trend.py <audit-history-dir> [--scope SCOPE]
+    python3 trend.py <.spec-audit-dir> [--scope SCOPE]
 
 Analyzes all audits in the history directory and prints:
 1. Findings Over Time — table + ASCII bar chart
@@ -245,7 +245,7 @@ def dimension_breakdown(index: list, audits: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Spec audit trend analysis")
-    parser.add_argument("history_dir", type=Path, help="Path to audit-history directory")
+    parser.add_argument("history_dir", type=Path, help="Path to .spec-audit directory")
     parser.add_argument("--scope", type=str, default=None, help="Filter to a specific scope")
     args = parser.parse_args()
 
